@@ -1,0 +1,348 @@
+#Proyecto Final ~ Estadística IV
+#Autores: Melani Loor, Martín Baca & Sofía Aguilar 
+
+# Librerias ---------------------------------------------------------------
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(reshape2)
+library(psych)
+library(corrplot)
+library(lavaan)
+library(semPlot)
+
+# Carga de base de datos --------------------------------------------------
+
+
+datos_originales <- read_excel("Data_eq_dinamita.xlsx")
+
+# Diccionario de variables ------------------------------------------------
+
+
+# Crear el diccionario de traducción
+diccionario <- c(
+  "AGE" = "Edad",
+  "My life path is controlled by forces I cannot influence." = "Mi camino de vida está controlado por fuerzas que no puedo influir.",
+  "It doesnâ€™t make sense to worry about the future; since there is nothing that I can do about it anyway." = "No tiene sentido preocuparme por el futuro; ya que no hay nada que pueda hacer al respecto.",
+  "Since whatever will be will be; it doesnâ€™t really matter what I do." = "Ya que lo que será, será; no importa mucho lo que haga.",
+  "You canâ€™t really plan for the future because things change so much." = "Realmente no puedes planificar para el futuro porque las cosas cambian tanto.",
+  "Often luck pays off better than hard work." = "A menudo la suerte paga mejor que el trabajo duro.",
+  "Fate determines much in my life." = "El destino determina mucho en mi vida.",
+  "It takes joy out of the process and flow of my activities; if I have to think about goals; outcomes; and products." = "Le quita la alegría al proceso y flujo de mis actividades; si tengo que pensar en metas, resultados y productos.",
+  "Life today is too complicated; I would prefer the simpler life of the past." = "La vida hoy en día es demasiado complicada; preferiría la vida más sencilla del pasado.",
+  "Spending what I earn of pleasures today is better than saving for tomorrowâ€™s security." = "Gastar lo que gano en placeres hoy es mejor que ahorrar para la seguridad del mañana.",
+  "I make friends easily." = "Hago amigos fácilmente.",
+  "I act comfortably with others." = "Actúo cómodamente con los demás.",
+  "I love large parties." = "Me encantan las fiestas grandes.",
+  "I avoid large crowds." = "Evito las multitudes grandes.",
+  "I take charge." = "Tomo el control.",
+  "I try to lead others." = "Intento liderar a los demás.",
+  "I am always busy." = "Siempre estoy ocupado.",
+  "I am always on the go." = "Siempre estoy en movimiento.",
+  "I love excitement." = "Me encanta la emoción.",
+  "I seek adventure." = "Busco aventura.",
+  "I have a lot of fun." = "Me divierto mucho.",
+  "I love life." = "Amo la vida.",
+  "When I feel mental pain; I believe that my pain will go away." = "Cuando siento dolor mental, creo que mi dolor se irá.",
+  "When I feel mental pain; I cannot concentrate because of my pain." = "Cuando siento dolor mental, no puedo concentrarme debido a mi dolor.",
+  "When I feel mental pain; I suffer very much." = "Cuando siento dolor mental, sufro mucho.",
+  "When I feel mental pain; I believe that time will make the pain disappear." = "Cuando siento dolor mental, creo que el tiempo hará desaparecer el dolor.",
+  "When I feel mental pain; I cannot contain the pain inside me." = "Cuando siento dolor mental, no puedo contener el dolor dentro de mí.",
+  "When I feel mental pain; I believe that if I do the right thing; the pain will disappear." = "Cuando siento dolor mental, creo que si hago lo correcto, el dolor desaparecerá.",
+  "When I feel mental pain; I cannot get the pain out of my mind." = "Cuando siento dolor mental, no puedo sacar el dolor de mi mente.",
+  "When I feel mental pain; although itâ€™s tough to bear the pain; I know that it will go away." = "Cuando siento dolor mental, aunque es difícil soportarlo, sé que se irá.",
+  "When I feel mental pain; I believe that I will find a way to reduce the pain." = "Cuando siento dolor mental, creo que encontraré una manera de reducir el dolor.",
+  "When I feel mental pain; the pain is too much to take." = "Cuando siento dolor mental, el dolor es demasiado para soportarlo."
+)
+
+# Crear un dataframe de mapeo entre las variables y sus números
+df_variables <- data.frame(
+  Numero = 1:length(diccionario),  # Asignar números secuenciales
+  Variable = names(diccionario),  # Los nombres de las variables en inglés
+  Traduccion = diccionario  # Las traducciones al español
+)
+
+
+# Transformación de datos  --------------------------------------------------------------
+
+##Tomar solo las columnas que contienen las variables que son preguntas de una encuesta 
+base_parametrizada <- datos_originales[,2:32]
+
+##Asignar un número a cada variable para que sea más sencillo la visualización 
+colnames(base_parametrizada) <- as.character(1:ncol(base_parametrizada))
+
+# Convertir todas las columnas de la base de datos de tipo factor a numéricas (si son factores)
+base_parametrizada[] <- lapply(base_parametrizada, function(x) {
+  if (is.factor(x) || is.numeric(x)) {
+    # Convertir las columnas numéricas o factores a ordinales con niveles de 1 a 5
+    factor(x, levels = 1:5, ordered = TRUE)  # Ajusta los niveles según tu escala
+  } else {
+    x  # Si la columna no es factor ni numérica, no la convertimos
+  }
+})
+
+#Validación de que las variables que estaban en factores e convirtieron en numéricos
+
+str(base_parametrizada)
+
+# Conversión de la base ordinal en una matriz 
+BASE_ordinal_matrix <- as.data.frame(base_parametrizada)
+
+#Validación de que las variables que estaban en factores e convirtieron en numéricos
+
+str(BASE_ordinal_matrix)
+
+#Base ordinal a numérica para algunos calculos
+
+BASE <- lapply(BASE_ordinal_matrix, function(x) {
+  if (is.ordered(x)) {
+    as.numeric(x)  # Convertir el factor ordinal a numérico
+  } else {
+    x  # Dejar las columnas no ordinales como están
+  }
+})
+
+# Convertir el resultado de lapply a un data.frame
+BASE <- as.data.frame(BASE)
+
+# Validación: Verificar la estructura para asegurarte que las columnas son ahora numéricas
+str(BASE)  
+
+
+# Analisis de los datos ----------------------------------------------------
+
+##Datos faltantes 
+
+colSums(is.na(BASE))
+a <- colSums(is.na(BASE)) / nrow(BASE)
+a[a > 0.5]
+
+##Imputación de datos (Eliminación de las columnas que contienen más del 50% de na)
+## Variable 9 contiene datos que no van acorde a la escala de likert entonces también es eliminada 
+
+BASE <- BASE[, !colnames(BASE) %in% c("X9", "X12","X22")]
+BASE_ordinal_matrix <- BASE_ordinal_matrix[, !colnames(BASE_ordinal_matrix) %in% c("9", "12","22")]
+
+
+### Gráficos de barras
+
+# Convertir datos a formato largo
+datos_largos <- melt(BASE_ordinal_matrix, id.vars = NULL, variable.name = "Variable", value.name = "Respuesta")
+
+# Crear gráfico de barras con facetas
+ggplot(datos_largos, aes(x = Respuesta)) +
+  geom_bar(fill = "skyblue") +
+  facet_wrap(~ Variable, scales = "free_x") +
+  labs(title = "Distribución de respuestas por variable", x = "Respuesta Likert", y = "Frecuencia") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+###Tabla de frecuencias
+
+tabla_frecuencias <- as.data.frame(apply(BASE_ordinal_matrix, 2, table))
+
+
+# Análisis Factorial Exploratorio ------------------------------
+
+#Paso 01: Hallar la matriz de correlación ------
+
+R_spearman <- cor(BASE, method = "spearman", use = "complete.obs" )
+
+R_poly <-  polychoric(BASE_ordinal_matrix)$rho
+
+
+# Paso 2: análisis de pertinencia -----------------------------------------
+
+#Ho: la matriz de correlaciones es la identidad 
+
+#Barlett
+
+cortest.bartlett(R_spearman, n = 679)
+cortest.bartlett(R_poly, n = 679)
+
+# KMO
+
+KMO(R_spearman)
+KMO(R_poly)
+
+
+#Es factible realizar el EFA
+
+# Paso 03: número de factores ----------------------------------------------
+
+#Kaiser
+
+svd(R_spearman)$d
+svd(R_poly)$d
+
+#Método del codo (gráfico de sedimentación)
+
+plot(svd(R_spearman)$d,type='b',pch=19,xlab='Num de factores',ylab='eigenvalues')
+plot(svd(R_poly)$d,type='b',pch=19,xlab='Num de factores',ylab='eigenvalues')
+
+
+#Método paralelo
+
+fa.parallel(R_spearman,n.obs=679)
+fa.parallel(R_poly,n.obs=679)
+
+#En todos los métodos coincide que se tome 6 factores. 
+
+# Ajuste (extracción de factores)------------------------------------------------------------------
+
+#Método de componentes principales iteradas (PA)
+
+##Si lo hago con la matriz de correlación
+
+fit_data_pa_R_spearman <- fa(R_spearman,nfactors=6,fm='pa',rotate='none')
+fa.diagram(fit_data_pa_R_spearman)
+
+fit_data_pa_R_poly <- fa(R_poly,nfactors=6,fm='pa',rotate='none')
+fa.diagram(fit_data_pa_R_poly)
+
+#Se coincide que el factor 6 se hace redundante dado que no está unido con ninguna línea,
+# entonces nos vamos a quedar con 5 factores 
+
+
+# Rotación ----------------------------------------------------------------
+
+##Rotación ortogonal (no obliga la correlación entre factores)
+
+### Spearman explica el 38% de la varianza 
+fit_pa_spearman_ortogonal <- fa(R_spearman,nfactors=5,fm='pa',rotate='varimax')
+fa.diagram(fit_pa_spearman_ortogonal)
+
+
+### policorica explica el 47% de la varianza 
+fit_pa_poly_ortogonal <- fa(R_poly,nfactors=6,fm='pa',rotate='varimax')
+fa.diagram(fit_pa_poly_ortogonal)
+
+#### Con esta rotación me quedo con la correlacion de policorica 
+
+## Rotación oblicua (obliga la correlación entre factores)
+
+### Spearman explica el 38% de la varianza 
+fit_pa_spearman_oblicua <- fa(R_spearman,nfactors=5,fm='pa',rotate='oblimin')
+fa.diagram(fit_pa_spearman_oblicua)
+
+### policorica explica el 47% de la varianza 
+fit_pa_poly_oblicua <- fa(R_poly,nfactors=6,fm='pa',rotate='oblimin')
+fa.diagram(fit_pa_poly_oblicua)
+
+#### Con esta rotación me quedo con la correlacion de policorica 
+
+# Bondad de ajuste --------------------------------------------------------
+
+#### Ahora vamos a tomar la decisión de qué mejor correlación de acuerdo al rms
+# más pequeño
+
+fit_pa_spearman_ortogonal$rms
+fit_pa_poly_ortogonal$rms
+
+###Me voy a quedar con la poly porque tiene menor RMS
+
+plot(fit_pa_poly_ortogonal,labels=rownames(R_poly))
+
+# Puntuaciones ------------------------------------------------------------
+
+#Las puntuaciones son una calificación de un individuo de acuerdo al factor
+
+puntuaciones <- factor.scores(BASE,fit_pa_poly_ortogonal)
+head(puntuaciones$scores)
+
+skimr::skim(puntuaciones$scores)
+
+
+
+
+
+
+
+# Análisis Factorial Confirmatorio ----------------------------------------
+
+# Modelo teórico propuesto ---------------------------
+modelo_cfa <- '
+  medioCtr =~ X1 + X2 + X3 + X4 + X5 + X6
+  agenteCtr =~ X10 + X13
+  objetoCtr =~ X11 + X14 + X15
+  tipoSuc =~ X16 + X17 + X18 + X19
+  momCtr =~ X7 + X8
+  modIntExt =~ X20 + X21 + X23 + X24 + X25 + X26 + X27 + X28
+'
+
+# Ajustar el modelo -------------------------------------------------------
+ajuste_cfa <- cfa(modelo_cfa, data = BASE, 
+                  estimator = "ML", 
+                  std.lv = FALSE)
+
+# Resumen del ajuste ------------------------------------------------------
+summary(ajuste_cfa, fit.measures = TRUE, standardized = TRUE)
+
+# Visualización del modelo -----------------------------------------------
+diagram(ajuste_cfa)
+
+# Medidas de bondad de ajuste --------------------------------------------
+fitMeasures(ajuste_cfa, "rmsea")
+
+
+# CCA ---------------------------------------------------------------------
+
+
+names(BASE_ordinal_matrix)
+# PA1: Preguntas sobre emociones, aventura y actividad
+PA1 <- BASE_ordinal_matrix[, c("17","18","19","20")]
+
+# PA2: Preguntas sobre dolor mental y resiliencia
+PA2 <- BASE_ordinal_matrix[, c("13","23","24","26","28","31")]
+
+# PA3: Preguntas sobre fatalismo y creencias sobre el futuro
+PA3 <- BASE_ordinal_matrix[, c("1","2","3","4","5","6","7","8")]
+
+# PA4: Preguntas sobre resiliencia frente al dolor mental
+PA4 <- BASE_ordinal_matrix[, c("21","25","27", "29", "30")]
+
+# PA5: Preguntas sobre liderazgo y control
+PA5 <- BASE_ordinal_matrix[, c("14","15")]
+
+# PA6: Preguntas sobre habilidades sociales y relaciones interpersonales
+PA6 <- BASE_ordinal_matrix[, c("10","11","16")]
+
+# Ver los primeros registros de cada factor para verificar los datos
+
+# Conjunto 1: Agrupar PA1, PA2 y PA3
+conjunto_1 <- cbind(PA1)
+
+# Conjunto 2: Agrupar PA4, PA5 y PA6
+conjunto_2 <- cbind(PA3)
+
+# Ver los primeros registros de cada conjunto para verificar la correcta combinación
+head(conjunto_1)
+head(conjunto_2)
+# Asegurarse de que todas las columnas son numéricas
+conjunto_1[] <- lapply(conjunto_1, as.numeric)
+conjunto_2[] <- lapply(conjunto_2, as.numeric)
+
+# Verificar las clases de las columnas después de la conversión
+sapply(conjunto_1, class)
+sapply(conjunto_2, class)
+# Realizar el Análisis de Correlación Canónica (ACC)
+acc_result <- cancor(conjunto_1, conjunto_2)
+
+# Ver los resultados del ACC
+print(acc_result)
+
+# Calcular la matriz de correlación entre conjunto_1 y conjunto_2
+cor_matrix <- cor(conjunto_1, conjunto_2)
+
+
+# Derretir la matriz para crear un formato adecuado para ggplot
+cor_matrix_melted <- melt(cor_matrix)
+cor_matrix_melted
+# Crear el mapa de calor usando ggplot
+ggplot(cor_matrix_melted, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0) +
+  theme_minimal() +
+  labs(title = "Mapa de calor de la Correlación Canónica", x = "Variables del Conjunto 1", y = "Variables del Conjunto 2")
+
+
+
