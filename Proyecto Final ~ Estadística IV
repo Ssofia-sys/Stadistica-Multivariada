@@ -1,6 +1,6 @@
 #Proyecto Final ~ Estadística IV
 #Autores: Melani Loor, Martín Baca & Sofía Aguilar 
-
+#install.packages(c("ca","skimr", "readxl", "ggplot2", "tidyr","reshape2","psych", "corrplot", "lavaan", "semPlot","CCA" ) ) 
 # Librerias ---------------------------------------------------------------
 library(readxl)
 library(ggplot2)
@@ -10,9 +10,10 @@ library(psych)
 library(corrplot)
 library(lavaan)
 library(semPlot)
-
+library(ca)
+library(skimr)
+library(reshape2)
 # Carga de base de datos --------------------------------------------------
-
 
 datos_originales <- read_excel("Data_eq_dinamita.xlsx")
 
@@ -309,10 +310,10 @@ PA6 <- BASE_ordinal_matrix[, c("10","11","16")]
 # Ver los primeros registros de cada factor para verificar los datos
 
 # Conjunto 1: Agrupar PA1, PA2 y PA3
-conjunto_1 <- cbind(PA1)
+conjunto_1 <- cbind(PA1,PA2,PA3)
 
 # Conjunto 2: Agrupar PA4, PA5 y PA6
-conjunto_2 <- cbind(PA3)
+conjunto_2 <- cbind(PA4, PA5, PA6)
 
 # Ver los primeros registros de cada conjunto para verificar la correcta combinación
 head(conjunto_1)
@@ -330,6 +331,8 @@ acc_result <- cancor(conjunto_1, conjunto_2)
 # Ver los resultados del ACC
 print(acc_result)
 
+
+
 # Calcular la matriz de correlación entre conjunto_1 y conjunto_2
 cor_matrix <- cor(conjunto_1, conjunto_2)
 
@@ -343,6 +346,129 @@ ggplot(cor_matrix_melted, aes(Var1, Var2, fill = value)) +
   scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0) +
   theme_minimal() +
   labs(title = "Mapa de calor de la Correlación Canónica", x = "Variables del Conjunto 1", y = "Variables del Conjunto 2")
+
+
+# BIPLOT ------------------------------------------------------------------
+# Realizamos el análisis de correlación canónica (CCA) entre los dos conjuntos
+library(CCA)
+# Realizar el análisis de correlación canónica (CCA)
+cc1 <- cc(conjunto_1, conjunto_2)
+
+# Extraer las puntuaciones canónicas para cada conjunto
+x_scores <- cc1$xcoef  # Puntuaciones para conjunto_1
+y_scores <- cc1$ycoef  # Puntuaciones para conjunto_2
+
+# Convertir las puntuaciones en un formato adecuado para ggplot
+x_scores_df <- as.data.frame(x_scores)
+y_scores_df <- as.data.frame(y_scores)
+
+# Añadir una columna de identificación de las puntuaciones
+x_scores_df$tipo <- "Conjunto 1"
+y_scores_df$tipo <- "Conjunto 2"
+
+# Combinar los dos conjuntos de puntuaciones en un único data frame
+scores_df <- rbind(x_scores_df, y_scores_df)
+
+# Convertir los datos para hacer un gráfico más limpio
+scores_melted <- melt(scores_df, id.vars = "tipo")
+
+# Crear el gráfico
+ggplot(scores_melted, aes(x = variable, y = value, color = tipo)) +
+  geom_point() +
+  geom_text(aes(label = variable), vjust = -1) +  # Añadir etiquetas de las variables
+  theme_minimal() +
+  labs(title = "Biplot de Correlación Canónica",
+       x = "Puntuaciones Canónicas",
+       y = "Valor de la Puntuación") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotar etiquetas del eje X si es necesario
+# Crear el biplot
+# Se trata de una representación gráfica en dos dimensiones de las puntuaciones y las cargas
+biplot(cc1, main = "Biplot de Correlación Canónica")
+
+
+
+
+#----------------------------------
+# Realizar el análisis de correlación canónica (CCA) entre los dos conjuntos con scores y biplot
+cc1 <- cc(conjunto_1, conjunto_2)
+
+# Extraer las puntuaciones canónicas (cargas de las variables)
+x_scores <- cc1$xcoef  # Cargas de las variables para conjunto 1
+y_scores <- cc1$ycoef  # Cargas de las variables para conjunto 2
+
+# Extraer las puntuaciones de las observaciones
+x_individual_scores <- cc1$x  # Puntuaciones de las observaciones para conjunto 1
+y_individual_scores <- cc1$y  # Puntuaciones de las observaciones para conjunto 2
+# Cargar librerías necesarias
+library(ggplot2)
+
+# Convertir las puntuaciones de las observaciones a data frames
+x_scores_df <- as.data.frame(x_individual_scores)
+y_scores_df <- as.data.frame(y_individual_scores)
+
+# Añadir un identificador para las puntuaciones
+x_scores_df$tipo <- "Conjunto 1"
+y_scores_df$tipo <- "Conjunto 2"
+
+# Combinar las puntuaciones de ambos conjuntos en un solo data frame
+scores_df <- rbind(x_scores_df, y_scores_df)
+
+# Convertir las cargas de las variables a data frames
+x_scores_var_df <- as.data.frame(x_scores)
+y_scores_var_df <- as.data.frame(y_scores)
+
+# Añadir identificadores para las cargas de las variables
+x_scores_var_df$variable <- rownames(x_scores_var_df)
+y_scores_var_df$variable <- rownames(y_scores_var_df)
+
+# Combinar las cargas de las variables en un solo data frame
+scores_var_df <- rbind(x_scores_var_df, y_scores_var_df)
+scores_var_df$tipo <- c(rep("Conjunto 1", nrow(x_scores_var_df)), rep("Conjunto 2", nrow(y_scores_var_df)))
+
+# Añadir una columna que indique a qué conjunto pertenece cada variable
+scores_var_df$conjunto <- ifelse(scores_var_df$variable %in% colnames(conjunto_1), "Conjunto 1", "Conjunto 2")
+
+# Graficar el biplot con colores distintos para las flechas por conjunto
+ggplot() +
+  # Graficar las puntuaciones de las observaciones
+  geom_point(data = scores_df, aes(x = V1, y = V2, color = tipo), size = 2) +
+  # Añadir etiquetas para las observaciones
+  geom_text(data = scores_df, aes(x = V1, y = V2, label = rownames(scores_df)), vjust = -1) +
+  # Graficar las cargas de las variables con colores diferentes según el conjunto
+  geom_segment(data = scores_var_df, aes(x = 0, y = 0, xend = V1, yend = V2, color = conjunto), 
+               arrow = arrow(type = "closed", length = unit(0.1, "inches")), 
+               linewidth = 1) +  # Las flechas cambiarán de color según el conjunto
+  # Añadir etiquetas para las cargas de las variables
+  geom_text(data = scores_var_df, aes(x = V1, y = V2, label = variable), vjust = -1, color = "black") +  # Las etiquetas en negro
+  scale_color_manual(values = c("Conjunto 1" = "darkred", "Conjunto 2" = "darkblue")) +  # Asignar colores rosa y celeste
+  theme_minimal() +
+  labs(title = "Biplot de Correlación Canónica",
+       x = "Componente Canonico 1",
+       y = "Componente Canonico 2") +
+  theme(legend.position = "bottom")
+
+
+# Cancor ------------------------------------------------------------------
+# Convertir todas las columnas de PA3 de factores ordinales a numéricos
+PA3_num <- as.data.frame(lapply(PA3, function(x) as.numeric(as.character(x))))
+
+# Verificar la conversión
+str(PA3_num)
+# Supongamos que PA1 es un vector numérico (si no lo es, sigue el mismo proceso de conversión)
+PA1_num <- as.data.frame(lapply(PA1, function(x) as.numeric(as.character(x))))
+
+# Realizar el Análisis de Correlación Canónica entre PA1 y PA3
+acc_result <- cancor(PA1_num, PA3_num)
+
+# Ver los resultados
+summary(acc_result)
+
+
+
+
+
+
+
 
 
 
